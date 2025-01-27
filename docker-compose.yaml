@@ -1,0 +1,77 @@
+services:
+  parser_tg_bot:
+    container_name: parser_tg_bot
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    restart: on-failure
+    env_file: .env
+    command: bash -c "python3 main.py"
+    depends_on:
+      - api_gateway
+
+  api_gateway:
+    container_name: api_gateway
+    build:
+      context: ./server/api_gateway
+      dockerfile: Dockerfile
+    restart: on-failure
+    env_file: .env
+    ports:
+      - ${API_GATEWAY_PORT}:${API_GATEWAY_PORT}
+    command: bash -c "python3 main.py" # fixme: start gunicorn
+    depends_on:
+      - rmq_broker
+      - parser_service
+
+  parser_service:
+    container_name: parser_service
+    build:
+      context: ./server/services/parser_service
+      dockerfile: Dockerfile
+    restart: on-failure
+    env_file: .env
+    command: bash -c "python3 main.py"  # fixme: start gunicorn
+
+  logger_service:
+    container_name: logger_service
+    build:
+      context: ./server/services/logger_service
+      dockerfile: Dockerfile
+    restart: on-failure
+    env_file: .env
+    command: bash -c "python3 main.py"
+    depends_on:
+      - rmq_broker
+    volumes:
+      - logs:/app/logs
+
+  rmq_broker:
+    container_name: rmq_broker
+    image: rabbitmq:4.0-management-alpine
+    ports:
+      - 5672:5672
+      - 15672:15672
+    volumes:
+      - rmq_data:/var/lib/rabbitmq
+    restart: on-failure
+
+  selenium_server:
+    container_name: selenium_server
+    image: selenium/standalone-chrome:latest
+    env_file:
+      - .env
+    ports:
+      - ${SELENIUM_PORT}:${SELENIUM_PORT}
+      - 7900:7900
+    restart: on-failure
+    shm_size: 4g
+    deploy:
+      resources:
+        limits:
+          memory: 4g  # Лимит по памяти
+          cpus: "4.0"  # Лимит по CPU
+
+volumes:
+  rmq_data:
+  logs:

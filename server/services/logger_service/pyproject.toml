@@ -1,0 +1,6 @@
+[tool.black]
+line-length = 79
+
+[tool.mypy]
+strict = true
+plugins = ['pydantic.mypy']
