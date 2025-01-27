@@ -22,7 +22,9 @@ class CardDataXPaths:
 
     CARD_IMAGES = "//ul[@class='swiper-wrapper']/li"
     SPECS = "//div[@class='product-params']"
-    DESCRIPTION = "//p[@class='option__text']"
+    # DESCRIPTION = "//p[@class='option__text']"
+    # DESCRIPTION = "//section[@class='product-details__description option']/p"
+    DESCRIPTION = "//section[@class='product-details__description option']"
     BUTTON_SHOW_ALL_SPECS_DESCRIPTION = (
         "//button[@data-name-for-wba='Item_Description_Parameters_More']"
     )
@@ -39,7 +41,7 @@ class WbParser:
     _WB_URL = settings.WB_URL
     _USER_AGENT = settings.USER_AGENT
     _options = webdriver.ChromeOptions()
-    _WAITING_FOR_LOAD_TIMEOUT = 16
+    _WAITING_FOR_LOAD_TIMEOUT = 30
 
     def __init__(self, remote: bool = True):
         self._options.page_load_strategy = "eager"
@@ -132,11 +134,7 @@ class WbParser:
         )
         close_popup_button.click()
 
-    def _get_card_specs(self) -> dict[str, str]:
-        """
-        Method parse specs from card page and convert to json string.
-        :return: json encoded string
-        """
+    def _get_card_spec_description(self) -> list[dict[str, str], str]:
         specs_dict = dict()
         with self._show_specs_and_description_window():
             WebDriverWait(self._driver, self._WAITING_FOR_LOAD_TIMEOUT).until(
@@ -156,14 +154,6 @@ class WbParser:
                 value_col = row.find_element(By.TAG_NAME, "td")
                 specs_dict[param_col.text] = value_col.text
 
-        return specs_dict
-
-    def _get_card_description(self) -> str:
-        """
-        Method parse description from card page
-        :return: description
-        """
-        with self._show_specs_and_description_window():
             WebDriverWait(self._driver, self._WAITING_FOR_LOAD_TIMEOUT).until(
                 ec.presence_of_element_located(
                     (
@@ -176,7 +166,11 @@ class WbParser:
                 By.XPATH,
                 CardDataXPaths.DESCRIPTION,
             )
-            return description_element.get_attribute("innerText")
+            return [
+                specs_dict,
+                description_element.get_attribute("innerText"),
+                # description_element.text,
+            ]
 
     def _get_card_images(self) -> list[str]:
         """
@@ -189,9 +183,12 @@ class WbParser:
             CardDataXPaths.CARD_IMAGES,
         )
         for item in image_list:
-            image_tag = item.find_element(By.XPATH, "./div/img")
-            img_url = image_tag.get_attribute("src")
-            img_urls_list.append(img_url)
+            try:
+                image_tag = item.find_element(By.XPATH, "./div/img")
+                img_url = image_tag.get_attribute("src")
+                img_urls_list.append(img_url)
+            except NoSuchElementException:
+                continue
 
         return img_urls_list
 
@@ -224,10 +221,12 @@ class WbParser:
         except TimeoutException:
             return None
 
+        card_specs_description = self._get_card_spec_description()
+
         good_data_dict = dict(
             pictures=self._get_card_images(),
-            specs=self._get_card_specs(),
-            description=self._get_card_description(),
+            specs=card_specs_description[0],
+            description=card_specs_description[1],
         )
 
         async with aiohttp.ClientSession() as session:
